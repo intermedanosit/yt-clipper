@@ -171,7 +171,7 @@ class VideoClipper:
 class ClipWorker:
     """Consumer worker that processes clip jobs from RabbitMQ"""
     
-    VERSION = "1.1.0"  # Worker version
+    VERSION = "1.2.0"  # Worker version - fixed S3 signature issue with domain resolution
     
     def __init__(self):
         self.clipper = VideoClipper()
