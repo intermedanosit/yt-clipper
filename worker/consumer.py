@@ -97,6 +97,9 @@ class VideoClipper:
     
     async def upload_to_s3(self, file_path: str, job_id: str) -> str:
         """Upload file to MinIO S3"""
+        import socket
+        from urllib.parse import urlparse
+        
         filename = Path(file_path).name
         s3_key = f"clips/{job_id}/{filename}"
         
@@ -105,21 +108,38 @@ class VideoClipper:
         # Determine if using HTTPS based on endpoint URL
         use_ssl = settings.s3_endpoint_url.startswith('https://')
         
-        # Configure for MinIO compatibility - use virtual host style with path fallback
+        # Parse endpoint URL and resolve hostname to IP if it contains dots
+        # This fixes boto3 signature issues with domain names containing dots
+        parsed_url = urlparse(settings.s3_endpoint_url)
+        hostname = parsed_url.hostname
+        
+        # Resolve hostname to IP if it contains dots (fixes S3v4 signature with MinIO)
+        if hostname and '.' in hostname:
+            try:
+                resolved_ip = socket.gethostbyname(hostname)
+                endpoint_url = settings.s3_endpoint_url.replace(hostname, resolved_ip)
+                print(f"Resolved {hostname} to {resolved_ip}", flush=True)
+            except socket.gaierror:
+                endpoint_url = settings.s3_endpoint_url
+                print(f"Could not resolve {hostname}, using original URL", flush=True)
+        else:
+            endpoint_url = settings.s3_endpoint_url
+        
+        # Configure for MinIO compatibility - use path style for compatibility with custom domains
         boto_config = Config(
             signature_version='s3v4',
             s3={
-                'addressing_style': 'auto'  # Let boto3 choose the best style for MinIO
+                'addressing_style': 'path'  # Use path-style for MinIO with custom domains
             },
             retries={'max_attempts': 3, 'mode': 'standard'}
         )
         
         # Debug output
-        print(f"S3 Config - Endpoint: {settings.s3_endpoint_url}, Region: {settings.s3_region}, Bucket: {settings.s3_bucket}", flush=True)
+        print(f"S3 Config - Endpoint: {endpoint_url}, Region: {settings.s3_region}, Bucket: {settings.s3_bucket}", flush=True)
         
         async with session.client(
             's3',
-            endpoint_url=settings.s3_endpoint_url,
+            endpoint_url=endpoint_url,
             aws_access_key_id=settings.s3_access_key,
             aws_secret_access_key=settings.s3_secret_key,
             region_name=settings.s3_region,
@@ -149,6 +169,8 @@ class VideoClipper:
 
 class ClipWorker:
     """Consumer worker that processes clip jobs from RabbitMQ"""
+    
+    VERSION = "1.1.0"  # Worker version
     
     def __init__(self):
         self.clipper = VideoClipper()
@@ -267,6 +289,7 @@ class ClipWorker:
         """Start consuming messages from RabbitMQ"""
         self.running = True
         
+        print(f"Worker Version: {self.VERSION}", flush=True)
         print(f"Connecting to RabbitMQ at {settings.rabbitmq_url}", flush=True)
         connection = await connect_robust(settings.rabbitmq_url)
         
