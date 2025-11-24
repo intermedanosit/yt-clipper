@@ -105,24 +105,24 @@ class VideoClipper:
         # Determine if using HTTPS based on endpoint URL
         use_ssl = settings.s3_endpoint_url.startswith('https://')
         
-        # Configure for MinIO compatibility with custom domains
+        # Configure for MinIO compatibility - use virtual host style with path fallback
         boto_config = Config(
             signature_version='s3v4',
             s3={
-                'addressing_style': 'path'  # Force path-style addressing for MinIO
+                'addressing_style': 'auto'  # Let boto3 choose the best style for MinIO
             },
             retries={'max_attempts': 3, 'mode': 'standard'}
         )
         
-        # For MinIO, use empty region if us-east-1 to avoid signature issues
-        region = '' if settings.s3_region == 'us-east-1' else settings.s3_region
+        # Debug output
+        print(f"S3 Config - Endpoint: {settings.s3_endpoint_url}, Region: {settings.s3_region}, Bucket: {settings.s3_bucket}", flush=True)
         
         async with session.client(
             's3',
             endpoint_url=settings.s3_endpoint_url,
-            aws_access_key_id=settings.s3_access_key.strip(),
-            aws_secret_access_key=settings.s3_secret_key.strip(),
-            region_name=region,
+            aws_access_key_id=settings.s3_access_key,
+            aws_secret_access_key=settings.s3_secret_key,
+            region_name=settings.s3_region,
             use_ssl=use_ssl,
             config=boto_config,
             verify=False if not use_ssl else None  # Skip SSL verification for HTTP
