@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clipper-config
+  namespace: yt-clipper
+data:
+  RABBITMQ_EXCHANGE: "clips"
+  RABBITMQ_QUEUE: "clip_jobs"
+  RABBITMQ_DLQ: "clip_jobs_dlq"
+  MAX_RETRY_ATTEMPTS: "2"
+  MAX_CLIP_DURATION_SECONDS: "600"
+  S3_BUCKET: "clips"
+  S3_REGION: "us-east-1"
+  WORKER_CONCURRENCY: "2"

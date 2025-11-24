@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clipper-worker
+  namespace: yt-clipper
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: clipper-worker
+  template:
+    metadata:
+      labels:
+        app: clipper-worker
+    spec:
+      containers:
+      - name: worker
+        image: yt-clipper:latest
+        imagePullPolicy: IfNotPresent
+        command: ["python", "-m", "worker.consumer"]
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: clipper-secrets
+              key: DATABASE_URL
+        - name: RABBITMQ_URL
+          valueFrom:
+            secretKeyRef:
+              name: clipper-secrets
+              key: RABBITMQ_URL
+        - name: S3_ENDPOINT_URL
+          valueFrom:
+            secretKeyRef:
+              name: clipper-secrets
+              key: S3_ENDPOINT_URL
+        - name: S3_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: clipper-secrets
+              key: S3_ACCESS_KEY
+        - name: S3_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: clipper-secrets
+              key: S3_SECRET_KEY
+        envFrom:
+        - configMapRef:
+            name: clipper-config
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        volumeMounts:
+        - name: temp-storage
+          mountPath: /tmp/downloads
+      volumes:
+      - name: temp-storage
+        emptyDir: {}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: clipper-worker-hpa
+  namespace: yt-clipper
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: clipper-worker
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 25
+        periodSeconds: 60
+      - type: Pods
+        value: 1
+        periodSeconds: 60
+      selectPolicy: Min
