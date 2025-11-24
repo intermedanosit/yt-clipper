@@ -117,8 +117,9 @@ class VideoClipper:
         if hostname and '.' in hostname:
             try:
                 resolved_ip = socket.gethostbyname(hostname)
-                endpoint_url = settings.s3_endpoint_url.replace(hostname, resolved_ip)
-                print(f"Resolved {hostname} to {resolved_ip}", flush=True)
+                # Rebuild URL with IP instead of hostname
+                endpoint_url = f"{parsed_url.scheme}://{resolved_ip}:{parsed_url.port}" if parsed_url.port else f"{parsed_url.scheme}://{resolved_ip}"
+                print(f"Resolved {hostname} to {resolved_ip}, using endpoint: {endpoint_url}", flush=True)
             except socket.gaierror:
                 endpoint_url = settings.s3_endpoint_url
                 print(f"Could not resolve {hostname}, using original URL", flush=True)
