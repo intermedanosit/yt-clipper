@@ -6,6 +6,8 @@ import uuid
 import json
 from contextlib import asynccontextmanager
 from aio_pika import connect_robust, Message, DeliveryMode, ExchangeType
+import aioboto3
+from botocore.config import Config
 
 from app.config import get_settings
 from app.database import get_db, init_db, ClipJob
@@ -25,7 +27,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="YouTube Clipper API",
     description="Async API for downloading and clipping YouTube videos",
-    version="1.0.0",
+    version="1.0.1",
     lifespan=lifespan
 )
 
@@ -42,7 +44,7 @@ async def verify_api_key(x_api_key: str = Header(...)):
 
 @app.get("/")
 async def root():
-    return {"message": "YouTube Clipper API", "version": "1.0.0"}
+    return {"message": "YouTube Clipper API", "version": "1.0.1"}
 
 
 @app.get("/health")
@@ -150,6 +152,38 @@ async def create_clip(
     )
 
 
+async def generate_presigned_url(s3_key: str, expiration: int = 3600) -> str:
+    """Generate a presigned URL for downloading a file from S3"""
+    session = aioboto3.Session()
+    
+    boto_config = Config(
+        signature_version='s3v4',
+        s3={'addressing_style': 'path'}
+    )
+    
+    use_ssl = settings.s3_public_endpoint_url.startswith('https://')
+    
+    async with session.client(
+        's3',
+        endpoint_url=settings.s3_public_endpoint_url,
+        aws_access_key_id=settings.s3_access_key,
+        aws_secret_access_key=settings.s3_secret_key,
+        region_name=settings.s3_region,
+        use_ssl=use_ssl,
+        config=boto_config,
+        verify=False if not use_ssl else None
+    ) as s3:
+        presigned_url = await s3.generate_presigned_url(
+            'get_object',
+            Params={
+                'Bucket': settings.s3_bucket,
+                'Key': s3_key
+            },
+            ExpiresIn=expiration
+        )
+        return presigned_url
+
+
 @app.get("/clip/{job_id}/status", response_model=ClipStatus, dependencies=[Depends(verify_api_key)])
 async def get_clip_status(
     job_id: str,
@@ -157,6 +191,7 @@ async def get_clip_status(
 ):
     """
     Get the status of a clip job by job ID.
+    Returns a presigned URL for completed clips (valid for 1 hour).
     """
     result = await db.execute(
         select(ClipJob).where(ClipJob.id == job_id)
@@ -169,7 +204,25 @@ async def get_clip_status(
             detail=f"Job {job_id} not found"
         )
     
-    return ClipStatus.model_validate(job)
+    # Generate presigned URL if clip is completed and has S3 key
+    download_url = None
+    if job.status == "completed" and job.s3_key:
+        download_url = await generate_presigned_url(job.s3_key)
+    
+    # Build response
+    response_data = {
+        "id": job.id,
+        "video_url": job.video_url,
+        "start_time": job.start_time,
+        "end_time": job.end_time,
+        "status": job.status,
+        "download_url": download_url,
+        "error_message": job.error_message,
+        "created_at": job.created_at,
+        "updated_at": job.updated_at
+    }
+    
+    return ClipStatus.model_validate(response_data)
 
 
 if __name__ == "__main__":

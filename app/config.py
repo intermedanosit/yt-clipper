@@ -18,7 +18,8 @@ class Settings(BaseSettings):
     max_retry_attempts: int = 2
     
     # MinIO/S3
-    s3_endpoint_url: str = "http://minio:9000"
+    s3_endpoint_url: str = "http://minio:9000"  # Internal endpoint for uploads
+    s3_public_endpoint_url: str = "http://localhost:9000"  # Public endpoint for presigned URLs
     s3_access_key: str = "minioadmin"
     s3_secret_key: str = "minioadmin"
     s3_bucket: str = "clips"

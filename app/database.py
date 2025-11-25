@@ -36,7 +36,7 @@ class ClipJob(Base):
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
     # Status values: pending, processing, completed, failed
     
-    s3_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    s3_key: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # S3 object key, not full URL
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     retry_count: Mapped[int] = mapped_column(default=0)
     

@@ -163,15 +163,14 @@ class VideoClipper:
                     ExtraArgs={'ContentType': 'video/mp4'}
                 )
             
-            # Generate S3 URL
-            s3_url = f"{settings.s3_endpoint_url}/{settings.s3_bucket}/{s3_key}"
-            return s3_url
+            # Return S3 key (not full URL - API will generate presigned URLs)
+            return s3_key
 
 
 class ClipWorker:
     """Consumer worker that processes clip jobs from RabbitMQ"""
     
-    VERSION = "1.2.0"  # Worker version - fixed S3 signature issue with domain resolution
+    VERSION = "1.2.1"  # Worker version - added presigned URL support with S3 key storage
     
     def __init__(self):
         self.clipper = VideoClipper()
@@ -181,7 +180,7 @@ class ClipWorker:
         self,
         job_id: str,
         status: str,
-        s3_url: Optional[str] = None,
+        s3_key: Optional[str] = None,
         error_message: Optional[str] = None,
         increment_retry: bool = False
     ):
@@ -195,8 +194,8 @@ class ClipWorker:
                 job.status = status
                 job.updated_at = datetime.utcnow()
                 
-                if s3_url:
-                    job.s3_url = s3_url
+                if s3_key:
+                    job.s3_key = s3_key
                 if error_message:
                     job.error_message = error_message
                 if increment_retry:
@@ -244,10 +243,10 @@ class ClipWorker:
                     
                     # Upload to S3
                     print(f"Uploading clip for job {job_id}", flush=True)
-                    s3_url = await self.clipper.upload_to_s3(str(clipped_file), job_id)
+                    s3_key = await self.clipper.upload_to_s3(str(clipped_file), job_id)
                     
                     # Update job as completed
-                    await self.update_job_status(job_id, "completed", s3_url=s3_url)
+                    await self.update_job_status(job_id, "completed", s3_key=s3_key)
                     print(f"Job {job_id} completed successfully", flush=True)
                 
                 # Acknowledge message

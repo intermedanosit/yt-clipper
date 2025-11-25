@@ -34,7 +34,7 @@ class ClipStatus(BaseModel):
     start_time: float
     end_time: float
     status: str
-    s3_url: Optional[str] = None
+    download_url: Optional[str] = None  # Presigned URL for downloading the clip
     error_message: Optional[str] = None
     created_at: datetime
     updated_at: datetime
